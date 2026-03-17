@@ -31,27 +31,54 @@ function parseItems(xml: string) {
     }))
 }
 
-export default async function handler() {
+function corsHeaders(contentType = "application/json") {
+    return {
+        "Content-Type": contentType,
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+        "Cache-Control": "public, s-maxage=60, stale-while-revalidate=30",
+    }
+}
+
+export default async function handler(req: Request) {
+    if (req.method === "OPTIONS") {
+        return new Response(null, {
+            status: 204,
+            headers: corsHeaders(),
+        })
+    }
+
     try {
         const res = await fetch(MEDIUM_RSS_URL, {
             headers: {
                 "User-Agent": "Mozilla/5.0",
+                Accept: "application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.8",
             },
             cache: "no-store",
         })
+
+        if (!res.ok) {
+            return new Response(
+                JSON.stringify({ error: "Failed to fetch Medium RSS." }),
+                {
+                    status: 502,
+                    headers: corsHeaders(),
+                }
+            )
+        }
 
         const xml = await res.text()
         const items = parseItems(xml)
 
         return new Response(JSON.stringify({ items }), {
-            headers: {
-                "Content-Type": "application/json",
-                "Cache-Control": "public, s-maxage=60",
-            },
+            status: 200,
+            headers: corsHeaders(),
         })
     } catch {
-        return new Response(JSON.stringify({ error: "Failed" }), {
+        return new Response(JSON.stringify({ error: "Proxy error." }), {
             status: 500,
+            headers: corsHeaders(),
         })
     }
 }
