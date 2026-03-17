@@ -28,10 +28,36 @@ function getTagValue(xml: string, tag: string) {
     return match?.[1]?.trim() ?? ""
 }
 
-function extractImageFromDescription(html: string) {
-    if (!html) return ""
-    const match = html.match(/<img[^>]+src="([^">]+)"/i)
-    return match?.[1] ?? ""
+function getContentEncoded(xml: string) {
+    const match = xml.match(/<content:encoded>([\s\S]*?)<\/content:encoded>/i)
+    return match?.[1]?.trim() ?? ""
+}
+
+function extractAllImages(html: string) {
+    if (!html) return []
+
+    const matches = [...html.matchAll(/<img[^>]+src="([^">]+)"/gi)]
+        .map((m) => m[1])
+        .filter(Boolean)
+
+    return matches
+}
+
+function pickBestImage(images: string[]) {
+    if (!images.length) return ""
+
+    // Prefer non-avatar / non-logo style images
+    const filtered = images.filter((src) => {
+        const s = src.toLowerCase()
+        return (
+            !s.includes("icon") &&
+            !s.includes("avatar") &&
+            !s.includes("profile") &&
+            !s.includes("1*mi") // weak attempt to avoid tiny generic assets
+        )
+    })
+
+    return filtered[0] || images[0] || ""
 }
 
 function extractOgImage(html: string) {
@@ -55,14 +81,23 @@ function parseItems(xml: string): FeedItem[] {
 
     return itemMatches.map((itemXml) => {
         const description = decodeXml(getTagValue(itemXml, "description"))
+        const contentEncoded = decodeXml(getContentEncoded(itemXml))
+
+        const imagesFromContent = extractAllImages(contentEncoded)
+        const imagesFromDescription = extractAllImages(description)
+
+        const image = pickBestImage([
+            ...imagesFromContent,
+            ...imagesFromDescription,
+        ])
 
         return {
             guid: decodeXml(getTagValue(itemXml, "guid")),
             title: decodeXml(getTagValue(itemXml, "title")),
             link: decodeXml(getTagValue(itemXml, "link")),
             pubDate: decodeXml(getTagValue(itemXml, "pubDate")),
-            description,
-            image: extractImageFromDescription(description),
+            description: contentEncoded || description,
+            image,
         }
     })
 }
